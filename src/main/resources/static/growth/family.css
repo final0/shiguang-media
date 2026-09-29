@@ -1,0 +1,5 @@
+.family-member-actions{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:12px}
+.family-member-actions .family-danger{color:#a76554}
+.family-children-heading{margin-top:32px}
+.child-archive-panel{margin-bottom:24px}
+.invite-card h3{margin:15px 0 5px}

@@ -1,0 +1,130 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shiguang
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shiguang
+  namespace: shiguang
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: {app: shiguang}
+  template:
+    metadata:
+      labels: {app: shiguang}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: nacos-config
+          image: local/shiguang-init:20260929
+          imagePullPolicy: Never
+          command: [/home/nacos/.venv/bin/python3, /bootstrap/fetch_nacos.py]
+          env:
+            - {name: NACOS_URL, value: 'http://192.168.32.1:8848/nacos'}
+            - {name: NACOS_NAMESPACE, value: public}
+            - {name: NACOS_GROUP, value: SHIGUANG}
+            - {name: NACOS_DATA_ID, value: springai-demo.yaml}
+          envFrom:
+            - secretRef: {name: shiguang-nacos-auth}
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {cpu: 200m, memory: 96Mi}
+          securityContext:
+            # Cached Nacos image keeps its Python runtime under a root-only path.
+            # This init process has no Linux capabilities or Kubernetes API token.
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: runtime-config, mountPath: /runtime}
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+      containers:
+        - name: app
+          image: local/shiguang:6fc743494302
+          imagePullPolicy: Never
+          ports:
+            - {name: app, containerPort: 8080}
+          env:
+            - {name: SPRING_CONFIG_LOCATION, value: 'file:/runtime/application.yaml'}
+            - name: JAVA_TOOL_OPTIONS
+              value: '-Xms96m -Xmx256m -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=32m -XX:ReservedCodeCacheSize=48m -Xss512k -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError -Duser.timezone=Asia/Shanghai'
+          envFrom:
+            - secretRef: {name: shiguang-runtime}
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {cpu: '1', memory: 600Mi}
+          startupProbe:
+            httpGet: {path: /, port: app}
+            periodSeconds: 5
+            failureThreshold: 48
+          readinessProbe:
+            httpGet: {path: /, port: app}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /, port: app}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: runtime-config, mountPath: /runtime, readOnly: true}
+            - {name: app-temp, mountPath: /tmp}
+        - name: gateway
+          image: local/shiguang-nginx:20260929
+          imagePullPolicy: Never
+          command: [nginx, -g, 'daemon off;']
+          ports:
+            - {name: http, containerPort: 8081}
+          resources:
+            requests: {cpu: 10m, memory: 12Mi}
+            limits: {cpu: 200m, memory: 48Mi}
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true}
+            - {name: gateway-temp, mountPath: /tmp}
+      volumes:
+        - name: runtime-config
+          emptyDir: {sizeLimit: 5Mi}
+        - name: bootstrap
+          configMap: {name: shiguang-bootstrap}
+        - name: app-temp
+          emptyDir: {sizeLimit: 1Gi}
+        - name: gateway-temp
+          emptyDir: {sizeLimit: 32Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shiguang
+  namespace: shiguang
+spec:
+  type: NodePort
+  selector: {app: shiguang}
+  ports:
+    - {name: http, port: 80, targetPort: http, nodePort: 30082}

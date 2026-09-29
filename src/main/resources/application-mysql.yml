@@ -1,0 +1,31 @@
+# 默认启用的 MySQL 模式：首次使用先手动执行 growth/schema-mysql.sql。
+# 连接信息已按提供的截图填写；环境变量仅作可选覆盖，不配置也使用下列默认值。
+# 不在应用启动时执行 DELIMITER / 存储过程脚本，也不再执行 H2 schema.sql。
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${GROWTH_MYSQL_URL:jdbc:mysql://160.202.231.154:3336/growth?useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=Asia/Shanghai}
+    username: ${GROWTH_MYSQL_USERNAME:root}
+    password: ${GROWTH_MYSQL_PASSWORD:Zhangxu1229Mysql}
+  # Redis 用于注销清理任务的多实例扫描租约；恢复期限以 MySQL 为准，会话仍使用 HttpSession。
+  data:
+    redis:
+      host: ${GROWTH_REDIS_HOST:160.202.231.154}
+      port: ${GROWTH_REDIS_PORT:6379}
+      password: ${GROWTH_REDIS_PASSWORD:Zhangxu1229Redis}
+      database: 0
+      connect-timeout: 1s
+      timeout: 1s
+  sql:
+    init:
+      mode: never
+
+app:
+  # 所有新上传的照片、视频均存入 MinIO；控制台地址不用于对象读写。
+  minio:
+    endpoint: ${GROWTH_MINIO_ENDPOINT:http://160.202.231.154:9000}
+    console-url: ${GROWTH_MINIO_CONSOLE_URL:http://160.202.231.154:9001}
+    access-key: ${GROWTH_MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${GROWTH_MINIO_SECRET_KEY:Zhangxu1229Minio}
+    bucket: ${GROWTH_MINIO_BUCKET:shiguang-media}
+    auto-create-bucket: true

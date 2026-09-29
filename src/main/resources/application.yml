@@ -1,0 +1,81 @@
+
+server:
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: strict
+        secure: ${SESSION_COOKIE_SECURE:false}
+      timeout: 8h
+  port: ${SERVER_PORT:8080}
+  # 本地演示默认仅监听本机；对外开放前补充认证和限流。
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
+spring:
+  config:
+    import: optional:file:./config/mail-secrets.properties
+  mail:
+    host: ${QQ_SMTP_HOST:smtp.qq.com}
+    port: ${QQ_SMTP_PORT:465}
+    username: ${QQ_SMTP_USERNAME:2976737985@qq.com}
+    password: ${QQ_SMTP_AUTH_CODE:}
+    default-encoding: UTF-8
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.ssl.enable]": true
+      "[mail.smtp.ssl.checkserveridentity]": true
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
+  profiles:
+    # 正常启动即使用 application-mysql.yml 中的真实数据库及 MinIO。
+    active: ${SPRING_PROFILES_ACTIVE:mysql}
+  sql:
+    init:
+      # MySQL 脚本含 DELIMITER / 辅助过程，由数据库客户端整份执行。
+      mode: never
+  servlet:
+    multipart:
+      # 图片由业务层限制为 8 MB，MP4 为 100 MB；业务层总文件大小限制 200 MB。
+      max-file-size: 100MB
+      # 留 1 MB 给 multipart 边界和表单头，避免恰好 200 MB 的文件被误拒绝。
+      max-request-size: 201MB
+      file-size-threshold: 0B
+  application:
+    name: springai-demo
+  mvc:
+    async:
+      request-timeout: 180s
+
+growth:
+  ai:
+    # 固定复用 app.ai.providers.qwen；各家庭还需管理员在页面主动开启。
+    enabled: ${GROWTH_AI_ENABLED:true}
+    timeout-seconds: ${GROWTH_AI_TIMEOUT_SECONDS:90}
+    max-output-tokens: ${GROWTH_AI_MAX_OUTPUT_TOKENS:1600}
+    daily-request-limit: ${GROWTH_AI_DAILY_REQUEST_LIMIT:40}
+
+app:
+  ai:
+    default-provider: ${AI_DEFAULT_PROVIDER:qwen}
+    system-prompt: 你是一个专业、友好的中文助手，请准确回答用户问题，不确定时明确说明。
+    timeout: 120s
+    # 默认关闭 SDK 自动重试，避免上游异常时重复等待。
+    max-retries: 0
+    providers:
+      qwen:
+        enabled: true
+        base-url: ${DASHSCOPE_BASE_URL:${QWEN_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}}
+        api-key: ${DASHSCOPE_API_KEY:${QWEN_API_KEY:sk-ws-H.PLYELDR.uoc0.MEUCIQDh4cXjCmQ0cq7EpSC-NO9KbGkgRYun5IzAr_fUfvePZQIgJuVcBYzBLQ2uHU8p7vhVyZLZrF-zd2Y0qD7aqvpBBU0}}
+        model: ${QWEN_MODEL:qwen3.8-max}
+      deepseek:
+        enabled: true
+        # 通过阿里云百炼调用 DeepSeek，与 qwen 使用同一业务空间的地址和密钥。
+        base-url: ${app.ai.providers.qwen.base-url:https://dashscope.aliyuncs.com/compatible-mode/v1}
+        api-key: ${app.ai.providers.qwen.api-key:sk-ws-H.PLYELDR.uoc0.MEUCIQDh4cXjCmQ0cq7EpSC-NO9KbGkgRYun5IzAr_fUfvePZQIgJuVcBYzBLQ2uHU8p7vhVyZLZrF-zd2Y0qD7aqvpBBU0}
+        model: ${DEEPSEEK_MODEL:deepseek-v4.1-flash}
+      kimi:
+        enabled: true
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+        api-key: ${OPENAI_API_KEY:sk-ws-H.PLYELDR.uoc0.MEUCIQDh4cXjCmQ0cq7EpSC-NO9KbGkgRYun5IzAr_fUfvePZQIgJuVcBYzBLQ2uHU8p7vhVyZLZrF-zd2Y0qD7aqvpBBU0}
+        model: ${OPENAI_MODEL:kimi-k3}

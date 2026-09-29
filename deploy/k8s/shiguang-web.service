@@ -1,0 +1,11 @@
+[Unit]
+Description=Forward Shiguang web traffic to the kind NodePort
+After=docker.service
+Requires=shiguang-web.socket
+
+[Service]
+ExecStart=/lib/systemd/systemd-socket-proxyd 192.168.32.2:30082
+DynamicUser=yes
+NoNewPrivileges=yes
+Restart=on-failure
+RestartSec=3

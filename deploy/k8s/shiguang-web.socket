@@ -1,0 +1,9 @@
+[Unit]
+Description=Listen for Shiguang web traffic on the host
+
+[Socket]
+ListenStream=0.0.0.0:30082
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

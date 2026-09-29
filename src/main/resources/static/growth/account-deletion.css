@@ -1,0 +1,8 @@
+.deletion-warning { padding:18px; margin:16px 0; border:1px solid #edd4c8; border-radius:14px; background:#fff5ee; color:#865640; line-height:1.8; }
+.deletion-warning p { margin:0 0 8px; }
+.deletion-warning p:last-child { margin:0; }
+.deletion-clock { padding:22px; margin:18px 0; border-radius:16px; background:#f2f5ed; text-align:center; }
+.deletion-clock strong { display:block; font-size:36px; letter-spacing:3px; color:#637960; font-variant-numeric:tabular-nums; }
+.deletion-clock small { display:block; margin-top:10px; color:#7a8376; }
+.deletion-consent { display:flex; gap:10px; align-items:flex-start; margin:16px 0; line-height:1.7; }
+.deletion-consent input { margin-top:6px; flex-shrink:0; }

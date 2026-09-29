@@ -1,0 +1,16 @@
+# 合并到 Nacos 现有 spring 节点，不要覆盖 datasource/data/其他配置。
+# 实际授权码由现有 shiguang-runtime Secret 的 QQ_SMTP_AUTH_CODE 键提供。
+spring:
+  mail:
+    host: smtp.qq.com
+    port: 465
+    username: 2976737985@qq.com
+    password: ${QQ_SMTP_AUTH_CODE:}
+    default-encoding: UTF-8
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.ssl.enable]": true
+      "[mail.smtp.ssl.checkserveridentity]": true
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
