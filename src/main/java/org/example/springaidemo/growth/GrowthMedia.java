@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpRange;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,8 @@ import java.awt.Font;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.*;
 import static org.example.springaidemo.growth.GrowthAuth.Actor;
 
@@ -123,7 +126,18 @@ public class GrowthMedia {
     }
 
     public void read(Actor a, long id, HttpServletRequest request, HttpServletResponse response) throws IOException {
-        var media = db.one("SELECT m.* FROM media_file m JOIN grow_record r ON r.id=m.record_id JOIN child c ON c.id=r.child_id AND c.family_id=r.family_id WHERE m.id=? AND m.family_id=? AND r.family_id=? AND m.is_deleted=FALSE AND r.is_deleted=FALSE AND c.is_active=TRUE", id, a.familyId(), a.familyId());
+        write(a, id, request, response, false);
+    }
+
+    public void download(Actor a, long id, HttpServletRequest request, HttpServletResponse response) throws IOException {
+        write(a, id, request, response, true);
+    }
+
+    private void write(Actor a, long id, HttpServletRequest request, HttpServletResponse response, boolean download) throws IOException {
+        // 预览和下载共用权限条件。家庭范围来自登录身份，归档／回收站内容须先恢复。
+        var media = db.one("SELECT m.*,r.record_time FROM media_file m JOIN grow_record r ON r.id=m.record_id JOIN child c ON c.id=r.child_id AND c.family_id=r.family_id WHERE m.id=? AND m.family_id=? AND r.family_id=? AND m.is_deleted=FALSE AND r.is_deleted=FALSE AND c.is_active=TRUE", id, a.familyId(), a.familyId());
+        String disposition = download ? ContentDisposition.attachment()
+                .filename(downloadFilename(media), StandardCharsets.UTF_8).build().toString() : "inline";
         String key = (String) media.get("ossKey");
         long size = storage.size(key);
         long start = 0, end = size - 1;
@@ -148,7 +162,8 @@ public class GrowthMedia {
         try (var input = length == 0 || "HEAD".equals(request.getMethod()) ? null : storage.open(key, start, length)) {
             response.setStatus(partial ? 206 : 200);
             response.setHeader("Accept-Ranges", "bytes"); response.setHeader("Cache-Control", "no-store");
-            response.setHeader("Content-Disposition", "inline");
+            response.setHeader("Content-Disposition", disposition);
+            response.setHeader("X-Content-Type-Options", "nosniff");
             response.setContentType((String) media.get("mimeType")); response.setContentLengthLong(length);
             if (partial) response.setHeader("Content-Range", "bytes " + start + "-" + end + "/" + size);
             if (input == null) return;
@@ -161,6 +176,18 @@ public class GrowthMedia {
                 output.write(buffer, 0, count); remaining -= count;
             }
         }
+    }
+
+    private String downloadFilename(Map<String, Object> media) {
+        String extension = switch ((String) media.get("mimeType")) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "video/mp4" -> ".mp4";
+            default -> throw GrowthException.bad("暂不支持下载此类型的文件");
+        };
+        // 历史记录未保存上传文件名，按记录日期和文件编号统一命名；不使用对象路径或用户标题。
+        String date = LocalDate.parse(media.get("recordTime").toString()).toString();
+        return "拾光-" + date + "-" + ((Number) media.get("id")).longValue() + extension;
     }
     /** 访客仅收到缩小且烧录水印的 JPEG，不开放家庭原图端点。 */
     ResponseEntity<Resource> preview(Map<String,Object> media) {

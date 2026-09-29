@@ -55,7 +55,7 @@ spec:
             - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
       containers:
         - name: app
-          image: local/shiguang:6fc743494302
+          image: local/shiguang:df54e2b1ba22
           imagePullPolicy: Never
           ports:
             - {name: app, containerPort: 8080}

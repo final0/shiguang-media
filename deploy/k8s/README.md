@@ -2,7 +2,7 @@
 
 本目录针对服务器上的 kind 集群 `learning`。使用用户已上传的 JAR，不重新编译 Java 项目。镜像、网段和端口是该服务器的实际配置，迁移到其他集群前需要调整。
 
-2026-09-29 部署完成：Pod `2/2 Running`，公网首页返回 HTTP 200，标题为“拾光 · 成长记录”；应用日志确认 MySQL 连接池成功建立连接，Nacos 初始化日志确认配置已加载，MinIO 就绪接口返回 HTTP 200。未重新编译 JAR，未执行自动化业务测试；上传、账号修改和模型对话仍需在页面中验证。
+2026-09-29 15:49（北京时间）下载功能版本更新完成：Pod `shiguang-68d8b67c46-lwvvt` 两个容器就绪，重启次数均为0，Deployment 可用副本为1。公网首页返回 HTTP 200，服务器首页、`growth.js` 和 `growth.css` 与新 JAR 内容一致。应用日志确认 MySQL 连接池已启动、Nacos 配置加载成功、`mailConfigured=true`，提醒扫描的数据库／应用时间一致。使用用户已编译上传的 JAR 打包镜像，未重新编译 Java、未执行自动化业务测试、未用登录账号下载私人媒体或发送测试邮件。
 
 ## 部署位置
 
@@ -11,8 +11,8 @@
 | 上传的 JAR | `/opt/apps/shiguang-media/springai-demo-0.0.1-SNAPSHOT.jar` |
 | 部署文件 | `/opt/apps/shiguang-media/deploy` |
 | Kubernetes namespace / Deployment / Service | `shiguang` |
-| 应用镜像 | `local/shiguang:6fc743494302` |
-| JAR SHA-256 | `6fc74349430227fdeb9dd0bf13c2841f57261da82e6de63ab3fe5b34ab9f72e1` |
+| 应用镜像 | `local/shiguang:df54e2b1ba22` |
+| JAR SHA-256 | `df54e2b1ba2269a4a637abef3925839f585b1a65757d88841c855358c946f260` |
 | Nacos namespace / group / dataId | `public` / `SHIGUANG` / `springai-demo.yaml` |
 | Nacos 配置地址（Pod 使用） | `http://192.168.32.1:8848/nacos` |
 | MySQL | `192.168.32.1:3306/growth` |
@@ -24,6 +24,12 @@
 初始化镜像 `local/shiguang-init:20260929` 复用了服务器已缓存的 Nacos 3.2.4 镜像中的 Python，只执行配置拉取脚本，不启动 Nacos。入口镜像 `local/shiguang-nginx:20260929` 来自已拉取的 `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/nginx:1.28-alpine`。三份镜像均已导入当前 kind 节点。
 
 ## 配置如何生效
+
+2026-09-29 15:49 更新记录：确认上传 JAR 包含下载 Controller、文件命名实现及前端下载入口后，生成并导入 `local/shiguang:df54e2b1ba22`，Deployment 已切换，服务器及本项目 manifest 同步更新。本次没有修改数据库、Nacos 或 Secret。回退资料在 `/opt/apps/shiguang-media/deploy/releases/20260929-074319/`（UTC），包含 `deployment.before.json`、`resources.before.yaml`、新 JAR 镜像构建目录、`release.json` 和更新后记录。上一个镜像 `local/shiguang:8903e89275fe` 已保留；如需回退，执行 `kubectl -n shiguang set image deployment/shiguang app=local/shiguang:8903e89275fe`，等待就绪后同步还原 manifest 中的镜像标签。
+
+2026-09-29 14:43 更新记录：新 JAR 包含提醒 epoch 时钟修复及 HTML 邮件模板。部署前查询确认邮箱／提醒／账户注销所需表和字段已存在，本次未执行数据库迁移。Nacos 原配置缺少 `spring.mail`，已增量补入 QQ SMTP 465/SSL 配置，密码使用 `${QQ_SMTP_AUTH_CODE:}`；现有 `shiguang-runtime` Secret 已增加该键并保留其余键。发布后回读确认 Nacos 配置一致。服务器及项目的 `resources.yaml` 已同步新镜像标签。
+
+本次备份位于 `/opt/apps/shiguang-media/deploy/releases/20260929-063658/`（目录名为 UTC 时间），包含更新前 Deployment、运行时 Secret、Nacos 配置、manifest，以及新 JAR 的独立镜像构建目录和版本摘要。Secret 备份为仅 root 可读文件，请勿公开。旧镜像 `local/shiguang:6fc743494302` 保留，可通过 `kubectl -n shiguang set image deployment/shiguang app=local/shiguang:6fc743494302` 回退应用；若需回退配置，需另行恢复对应 Nacos／Secret 备份。仅回退 Deployment 不会还原这些配置。
 
 2026-09-29 更新记录：已将用户上传的新 JAR 制作为 `local/shiguang:6fc743494302` 并切换 Deployment。该版本包含公网 HTTP 下 UUID 生成兼容修复。公网首页引用 `assistant.js?v=20260929-http-uuid`，服务器实际返回的首页和助手脚本与新 JAR 内容一致。更新前部署与回退信息保存在服务器 `/opt/apps/shiguang-media/deploy/releases/20260929-023655/`，旧镜像仍保留。未调用千问进行业务验证。
 

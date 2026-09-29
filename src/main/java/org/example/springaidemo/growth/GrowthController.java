@@ -74,6 +74,7 @@ public class GrowthController {
     @PostMapping("/records/{id}/comments") public void comment(@PathVariable long id, @Valid @RequestBody GrowthDtos.Comment input, HttpServletRequest r) { service.comment(actor(r), id, input); }
     @PostMapping("/records/{id}/media") public void upload(@PathVariable long id, @RequestParam("files") List<MultipartFile> files, HttpServletRequest r) { media.upload(actor(r), id, files); }
     @GetMapping("/media/{id}") public void mediaFile(@PathVariable long id, HttpServletRequest r, HttpServletResponse response) throws java.io.IOException { media.read(actor(r), id, r, response); }
+    @GetMapping("/media/{id}/download") public void downloadMedia(@PathVariable long id, HttpServletRequest r, HttpServletResponse response) throws java.io.IOException { media.download(actor(r), id, r, response); }
     @PostMapping("/measurements") public void measurement(@Valid @RequestBody GrowthDtos.Measurement input, HttpServletRequest r) { service.saveMeasurement(actor(r), null, input); }
     @PutMapping("/measurements/{id}") public void editMeasurement(@PathVariable long id, @Valid @RequestBody GrowthDtos.Measurement input, HttpServletRequest r) { service.saveMeasurement(actor(r), id, input); }
     @DeleteMapping("/measurements/{id}") public void deleteMeasurement(@PathVariable long id, HttpServletRequest r) { service.deleteMeasurement(actor(r), id); }

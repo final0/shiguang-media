@@ -211,10 +211,40 @@ function deleteGrowthData(kind,id){
     closeModal();await load();toast(`${label}已删除`);
   },'确认删除');
 }
+const mediaDownloadButton = m => btn(isVideo(m)?'下载视频':'下载照片','download-media','download','secondary small',`data-id="${m.id}"`);
+const mediaFileActions = (m,label) => `<div class="media-file-actions"><span>${esc(label)} · ${bytes(m.sizeBytes)}</span>${mediaDownloadButton(m)}</div>`;
+function detailPhoto(m,index,coverPhoto=false){
+  return `<figure class="detail-photo${coverPhoto?' detail-photo-cover':''}"><button type="button" class="photo-preview" data-action="lightbox" data-id="${m.id}" aria-label="放大第 ${index+1} 张照片"><img ${coverPhoto?'class="detail-cover"':''} src="/api/growth/media/${m.id}" alt="成长记录照片 ${index+1}" ${coverPhoto?'':'loading="lazy"'}></button><figcaption>${mediaFileActions(m,`照片 ${index+1}`)}</figcaption></figure>`;
+}
+function lightbox(id){
+  const m=state.data?.records.flatMap(r=>r.media).find(m=>m.id===id);
+  if(!m||isVideo(m))return toast('照片已删除或不在当前家庭中，请刷新后重试');
+  openModal('成长的一个小瞬间',`<img class="lightbox-image" src="/api/growth/media/${m.id}" alt="成长记录照片">${mediaFileActions(m,'照片')}<p class="form-hint">下载的是上传处理后保存的照片，已移除 EXIF 信息。</p>`);
+}
+async function downloadMedia(id){
+  const userId=state.data?.user.id,familyId=state.data?.family.id;
+  const m=state.data?.records.flatMap(r=>r.media).find(m=>m.id===id);
+  if(!m)return toast('文件已删除或不在当前家庭中，请刷新后重试');
+  const url=`/api/growth/media/${id}/download`;
+  // HEAD 先检查登录、权限及文件是否存在；不使用 Blob 缓存整个视频。
+  const response=await fetch(url,{method:'HEAD',credentials:'same-origin',cache:'no-store'});
+  if(state.data?.user.id!==userId||state.data?.family.id!==familyId)return;
+  if(!response.ok){
+    const messages={401:'登录已失效，请重新登录后下载',403:'没有权限下载此文件',404:'文件不存在、已移入回收站或孩子档案已归档，请刷新后重试',409:'当前账号或家庭状态暂不支持下载'};
+    const error=new Error(messages[response.status]||'文件暂时无法下载，请稍后重试');error.status=response.status;throw error;
+  }
+  // 实际 GET 仍由后端重新校验权限；交给浏览器管理下载进度，文件名由响应头提供。
+  const link=document.createElement('a');link.href=url;link.download='';link.hidden=true;
+  document.body.append(link);try{link.click();}finally{link.remove();}
+  toast('已发起下载，请查看浏览器的下载列表');
+}
 function detail(id){
   const r=state.data.records.find(r=>r.id===id);if(!r)return toast('这条记录已删除或不在当前家庭中');
   const photos=r.media.filter(m=>!isVideo(m)),videos=r.media.filter(isVideo);
-  openModal(r.title,`<div class="detail-meta">${avatar(r.author,'',r.userId)}${esc(r.author)} · ${dateText(r.recordTime)} <span class="pill">${r.recordType==='milestone'?'成长里程碑':'日常点滴'}</span></div>${cover(r)?`<img class="detail-cover" src="${cover(r)}" alt="${esc(r.title)}">`:''}<p class="detail-content">${esc(r.content)}</p>${photos.length>1?`<div class="detail-images">${photos.slice(1).map(m=>`<button data-action="lightbox" data-id="${m.id}" aria-label="放大照片"><img src="/api/growth/media/${m.id}" alt="成长记录照片" loading="lazy"></button>`).join('')}</div>`:''}${videos.length?`<section class="detail-videos"><h3>会动的回忆 · ${videos.length} 个视频</h3>${videos.map((m,i)=>`<div class="video-item">${videoPlayer('/api/growth/media/'+m.id,r.title+' · 视频 '+(i+1))}<p class="form-hint">视频 ${i+1} · ${bytes(m.sizeBytes)} · 仅家人可见</p></div>`).join('')}</section>`:''}${r.illustration&&!r.media.length?'<p class="form-hint">此图为示例插画，上传你自己的照片或视频后会显示真实内容。</p>':''}<div class="record-tags">${r.tags.map(t=>`<span># ${esc(t)}</span>`).join('')}</div>${canEdit(r)?`<div class="detail-actions">${btn('编辑','edit','edit','secondary small',`data-id="${r.id}"`)}${btn('限时分享','share','share','secondary small',`data-id="${r.id}"`)}${btn('移入回收站','delete','trash','secondary small',`data-id="${r.id}"`)}</div>`:''}<section class="comments"><h3>家人的小回应 · ${r.comments.length}</h3>${r.comments.map(c=>`<div class="comment">${avatar(c.nickname,'peach',c.userId)}<div><small>${esc(c.nickname)} · ${timeText(c.createTime)}</small><p>${esc(c.content)}</p></div></div>`).join('')}<form class="comment-form" data-form="comment" data-id="${r.id}"><input name="content" required maxlength="500" placeholder="留下一句温暖的话…" aria-label="评论内容"><button class="btn small" type="submit">发送</button></form></section>`);
+  const photoContent=photos.length?detailPhoto(photos[0],0,true):cover(r)?`<img class="detail-cover" src="${cover(r)}" alt="${esc(r.title)}">`:'';
+  const otherPhotos=photos.length>1?`<div class="detail-images">${photos.slice(1).map((m,i)=>detailPhoto(m,i+1)).join('')}</div>`:'';
+  const videoContent=videos.length?`<section class="detail-videos"><h3>会动的回忆 · ${videos.length} 个视频</h3>${videos.map((m,i)=>`<div class="video-item">${videoPlayer('/api/growth/media/'+m.id,r.title+' · 视频 '+(i+1))}${mediaFileActions(m,`视频 ${i+1}`)}</div>`).join('')}</section>`:'';
+  openModal(r.title,`<div class="detail-meta">${avatar(r.author,'',r.userId)}${esc(r.author)} · ${dateText(r.recordTime)} <span class="pill">${r.recordType==='milestone'?'成长里程碑':'日常点滴'}</span></div>${photoContent}<p class="detail-content">${esc(r.content)}</p>${otherPhotos}${videoContent}${r.media.length?'<p class="form-hint">仅家人可下载。照片为上传处理后保存的版本，已移除 EXIF 信息；视频保留上传文件。</p>':''}${r.illustration&&!r.media.length?'<p class="form-hint">此图为示例插画，上传你自己的照片或视频后会显示真实内容。</p>':''}<div class="record-tags">${r.tags.map(t=>`<span># ${esc(t)}</span>`).join('')}</div>${canEdit(r)?`<div class="detail-actions">${btn('编辑','edit','edit','secondary small',`data-id="${r.id}"`)}${btn('限时分享','share','share','secondary small',`data-id="${r.id}"`)}${btn('移入回收站','delete','trash','secondary small',`data-id="${r.id}"`)}</div>`:''}<section class="comments"><h3>家人的小回应 · ${r.comments.length}</h3>${r.comments.map(c=>`<div class="comment">${avatar(c.nickname,'peach',c.userId)}<div><small>${esc(c.nickname)} · ${timeText(c.createTime)}</small><p>${esc(c.content)}</p></div></div>`).join('')}<form class="comment-form" data-form="comment" data-id="${r.id}"><input name="content" required maxlength="500" placeholder="留下一句温暖的话…" aria-label="评论内容"><button class="btn small" type="submit">发送</button></form></section>`);
 }
 function shareForm(id){openModal('把这一刻，分享给在意的人',`<p class="modal-intro">对方只能查看这一条记录。到期、达到访问上限或记录被删除后，链接自动失效。</p><form data-form="share" data-id="${id}"><div class="form-row"><label class="field"><span>分享有效期</span><select name="hours"><option value="24">1 天</option><option value="72">3 天</option><option value="168">7 天</option></select></label><label class="field"><span>最多访问次数</span><input type="number" name="maxAccess" min="1" max="1000" required value="20"></label></div><p class="form-hint">分享仅包含文字和带水印的图片预览，不包含视频，也不提供原图下载。请仅将链接发给信任的人；网页无法阻止截图或另行拍摄。</p>${formActions('生成分享链接')}</form>`);}
 async function copy(text){try{await navigator.clipboard.writeText(text);toast('已经复制好了');}catch{openModal('复制这段内容',`<p class="modal-intro">浏览器暂不支持自动复制，请选中下方内容手动复制。</p><label class="field"><input readonly value="${esc(text)}" aria-label="待复制内容"></label>`);$('input',$('#modal')).select();}}
@@ -247,7 +277,8 @@ document.addEventListener('click',event=>{
       case'edit':recordForm(id);break;
       case'close':closeModal();break;
       case'view-child':state.childId=id;navigate('timeline');break;
-      case'lightbox':openModal('成长的一个小瞬间',`<img class="lightbox-image" src="/api/growth/media/${id}" alt="成长记录照片">`);break;
+      case'lightbox':lightbox(id);break;
+      case'download-media':await downloadMedia(id);break;
       case'delete':confirmDialog('把这段回忆暂时收起来？','记录、照片和视频会一起进入回收站，管理员可以恢复。已经发出的分享链接会立即失效。',async()=>{await api('/records/'+id,{method:'DELETE'});closeModal();await load();toast('已经移入回收站');},'移入回收站');break;
       case'restore':await api(`/records/${id}/restore`,{method:'POST'});await load();toast('回忆已经回到时间线，旧分享仍然失效');break;
       case'purge':confirmDialog('确定永久删除这段回忆？','文字、评论和图片将永久清理，无法恢复。请确认已经保存好需要的内容。',async()=>{await api(`/records/${id}/purge`,{method:'DELETE'});closeModal();await load();toast('记录已彻底删除，照片和视频将在后台清理');},'永久删除');break;
