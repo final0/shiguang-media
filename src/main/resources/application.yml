@@ -10,6 +10,9 @@ server:
   port: ${SERVER_PORT:8080}
   # 本地演示默认仅监听本机；对外开放前补充认证和限流。
   address: ${SERVER_ADDRESS:127.0.0.1}
+  tomcat:
+    # 允许25个文件分段；业务层另行限制文件数。
+    max-part-count: 50
 
 spring:
   config:
@@ -36,10 +39,10 @@ spring:
       mode: never
   servlet:
     multipart:
-      # 图片由业务层限制为 8 MB，MP4 为 100 MB；业务层总文件大小限制 200 MB。
+      # 图片由业务层限制为 8 MB，MP4 为 100 MB；业务层总文件大小限制 500 MB。
       max-file-size: 100MB
-      # 留 1 MB 给 multipart 边界和表单头，避免恰好 200 MB 的文件被误拒绝。
-      max-request-size: 201MB
+      # 留 1 MB 给 multipart 边界和表单头，避免恰好 500 MB 的文件被误拒绝。
+      max-request-size: 501MB
       file-size-threshold: 0B
   application:
     name: springai-demo

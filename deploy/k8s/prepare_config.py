@@ -110,7 +110,7 @@ def main():
     config['server']['address'] = '0.0.0.0'
     config['server']['port'] = 8080
     config['server']['shutdown'] = 'graceful'
-    config['server']['tomcat'] = {'threads': {'max': 32, 'min-spare': 4}}
+    config['server']['tomcat'] = {'threads': {'max': 32, 'min-spare': 4}, 'max-part-count': 50}
     config['spring']['lifecycle'] = {'timeout-per-shutdown-phase': '30s'}
     jdbc = config['spring']['datasource']['url']
     config['spring']['datasource']['url'] = re.sub(r'(?<=//)[^/]+', '192.168.32.1:3306', jdbc, count=1)

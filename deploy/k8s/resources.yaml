@@ -114,7 +114,8 @@ spec:
         - name: bootstrap
           configMap: {name: shiguang-bootstrap}
         - name: app-temp
-          emptyDir: {sizeLimit: 1Gi}
+          # 上传原文件与校验/重编码副本会同时存在，给500 MiB请求预留空间。
+          emptyDir: {sizeLimit: 2Gi}
         - name: gateway-temp
           emptyDir: {sizeLimit: 32Mi}
 ---

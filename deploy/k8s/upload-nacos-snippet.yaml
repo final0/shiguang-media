@@ -1,0 +1,11 @@
+# 合并到 Nacos 现有 spring/server 节点，保留数据源、邮件、Redis和Tomcat线程等配置。
+# Spring 总请求上限包含 multipart 开销；500 MiB 文件合计限制由业务代码执行。
+spring:
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 501MB
+      file-size-threshold: 0B
+server:
+  tomcat:
+    max-part-count: 50

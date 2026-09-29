@@ -17,7 +17,7 @@ public class GrowthExceptionHandler {
     ResponseEntity<?> handle(GrowthException e) { return ResponseEntity.status(e.status()).contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(e.body()); }
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<?> upload(MaxUploadSizeExceededException e) {
-        return ResponseEntity.status(413).body(java.util.Map.of("message", "每张图片不能超过 8 MB，每个视频不能超过 100 MB，每次文件总大小不能超过 200 MB"));
+        return ResponseEntity.status(413).body(java.util.Map.of("message", "每张图片不能超过 8 MB，每个视频不能超过 100 MB，每次最多 25 个文件且合计不能超过 500 MB"));
     }
     @ExceptionHandler(org.springframework.dao.DataAccessException.class)
     ResponseEntity<?> database(org.springframework.dao.DataAccessException e) {

@@ -32,6 +32,9 @@ import static org.example.springaidemo.growth.GrowthAuth.Actor;
 @Service
 public class GrowthMedia {
     private static final Logger log = LoggerFactory.getLogger(GrowthMedia.class);
+    private static final int MAX_FILES_PER_UPLOAD = 25;
+    private static final int MAX_FILES_PER_RECORD = 25;
+    private static final long MAX_UPLOAD_BYTES = 500L * 1024 * 1024;
     private final GrowthStore db;
     private final GrowthService service;
     private final GrowthObjectStorage storage;
@@ -47,9 +50,10 @@ public class GrowthMedia {
 
     public void upload(Actor a, long recordId, List<MultipartFile> files) {
         service.canEdit(a, service.record(a, recordId, false));
-        if (files == null || files.isEmpty() || files.size() > 6) throw GrowthException.bad("每次请选择 1–6 个 JPG、PNG 或 MP4 文件");
+        if (files == null || files.isEmpty() || files.size() > MAX_FILES_PER_UPLOAD) throw GrowthException.bad("每次请选择 1–25 个 JPG、PNG 或 MP4 文件");
         long requestBytes = files.stream().mapToLong(MultipartFile::getSize).sum();
-        if (requestBytes > 200L * 1024 * 1024) throw GrowthException.bad("本次照片和视频总大小不能超过 200 MB");
+        if (requestBytes > MAX_UPLOAD_BYTES) throw GrowthException.bad("本次照片和视频总大小不能超过 500 MB");
+        checkMediaCount(a, recordId, files.size());
         List<Path> temporary = new ArrayList<>();
         List<PreparedMedia> prepared = new ArrayList<>();
         try {
@@ -94,7 +98,8 @@ public class GrowthMedia {
                 transaction.executeWithoutResult(status -> {
                     service.lockFamily(a);
                     service.canEdit(a, service.record(a, recordId, false));
-                    if (db.number("SELECT COUNT(*) FROM media_file WHERE record_id=? AND family_id=?", recordId, a.familyId()) + files.size() > 12) throw GrowthException.bad("每条记录最多保存 12 个照片或视频文件");
+                    // 持有家庭行锁后再次检查，避免并发追加突破记录上限。
+                    checkMediaCount(a, recordId, files.size());
                     long quota = ((Number) db.one("SELECT storage_quota FROM family WHERE id=?", a.familyId()).get("storageQuota")).longValue();
                     long used = db.number("SELECT COALESCE(SUM(size_bytes),0) FROM media_file WHERE family_id=? AND is_deleted=FALSE", a.familyId());
                     if (used + prepared.stream().mapToLong(PreparedMedia::size).sum() > quota) throw GrowthException.bad("家庭空间容量不足，请先清理照片或视频");
@@ -122,6 +127,12 @@ public class GrowthMedia {
                 try { Files.deleteIfExists(file); }
                 catch (IOException e) { log.warn("Cannot remove media temporary file {}", file.getFileName()); }
             }
+        }
+    }
+
+    private void checkMediaCount(Actor a, long recordId, int additional) {
+        if (db.number("SELECT COUNT(*) FROM media_file WHERE record_id=? AND family_id=?", recordId, a.familyId()) + additional > MAX_FILES_PER_RECORD) {
+            throw GrowthException.bad("每条记录最多保存 25 个照片或视频文件");
         }
     }
 

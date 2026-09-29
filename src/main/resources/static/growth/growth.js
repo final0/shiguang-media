@@ -61,7 +61,7 @@ async function api(path,{method='GET',body}={}) {
   const multipart=body instanceof FormData;
   const response=await fetch('/api/growth'+path,{method,credentials:'same-origin',headers:{'X-Growth-Request':'1',...(body&&!multipart?{'Content-Type':'application/json'}:{})},body:body?(multipart?body:JSON.stringify(body)):undefined});
   const text=await response.text();let data;try{data=text?JSON.parse(text):null;}catch{data=null;}
-  if(!response.ok){const error=new Error(data?.message || (response.status===413?'文件过大：图片最多 8 MB，视频最多 100 MB，每次合计最多 200 MB':'操作未完成，请稍后重试'));error.status=response.status;error.details=data;throw error;}
+  if(!response.ok){const error=new Error(data?.message || (response.status===413?'文件过大：图片最多 8 MB，视频最多 100 MB，每次最多 25 个文件，合计最多 500 MB':'操作未完成，请稍后重试'));error.status=response.status;error.details=data;throw error;}
   return data;
 }
 function showError(error,form){
@@ -84,7 +84,20 @@ const mediaSummary = media => {const videos=media.filter(isVideo).length;const p
 function cover(r){const photo=r.media?.find(m=>!isVideo(m));if(photo)return `/api/growth/media/${photo.id}`;if(r.media?.length)return null;return r.illustration&&['park','bike','baking','night','birthday','sea'].includes(r.illustration)?`/growth/${r.illustration}.svg`:null;}
 function videoCover(){return `<div class="video-cover">${icon('video')}<span>让回忆，动起来</span><small>MP4 · 打开记录播放</small></div>`;}
 function videoPlayer(url,label='成长记录视频'){return `<div class="video-player"><video controls playsinline preload="metadata" aria-label="${esc(label)}" src="${esc(url)}"></video><p class="video-error" hidden role="status">视频暂时无法播放，请检查登录状态与网络，或将文件转换为 H.264 / AAC 编码的 MP4 后重新上传。</p></div>`;}
-function validateMediaFiles(files){if(files.length>6)throw new Error('每次最多选择 6 个照片或视频文件');let total=0;for(const f of files){const video=/\.mp4$/i.test(f.name)||f.type==='video/mp4';const image=['image/jpeg','image/png'].includes(f.type)||/\.(jpe?g|png)$/i.test(f.name);if(!video&&!image)throw new Error('仅支持 JPG、PNG 图片和 MP4 视频');if(!f.size||f.size>(video?100:8)*1024*1024)throw new Error(video?'每个视频须大于 0 且不超过 100 MB':'每张图片须大于 0 且不超过 8 MB');total+=f.size;}if(total>200*1024*1024)throw new Error('本次照片和视频总大小不能超过 200 MB');}
+const MEDIA_UPLOAD_LIMITS = {filesPerUpload:25, filesPerRecord:25, totalBytes:500*1024*1024};
+function validateMediaFiles(files,existingCount=0){
+  if(files.length>MEDIA_UPLOAD_LIMITS.filesPerUpload)throw new Error('每次最多选择 25 个照片或视频文件');
+  if(files.length&&existingCount+files.length>MEDIA_UPLOAD_LIMITS.filesPerRecord)throw new Error(`这条记录已有 ${existingCount} 个文件，追加后不能超过 25 个`);
+  let total=0;
+  for(const f of files){
+    const video=/\.mp4$/i.test(f.name)||f.type==='video/mp4';
+    const image=['image/jpeg','image/png'].includes(f.type)||/\.(jpe?g|png)$/i.test(f.name);
+    if(!video&&!image)throw new Error('仅支持 JPG、PNG 图片和 MP4 视频');
+    if(!f.size||f.size>(video?100:8)*1024*1024)throw new Error(video?'每个视频须大于 0 且不超过 100 MB':'每张图片须大于 0 且不超过 8 MB');
+    total+=f.size;
+  }
+  if(total>MEDIA_UPLOAD_LIMITS.totalBytes)throw new Error('本次照片和视频总大小不能超过 500 MB');
+}
 function recordCard(r){
   const source=cover(r),videos=r.media.filter(isVideo);
   return `<article class="record-card"><button class="record-image" data-action="detail" data-id="${r.id}" aria-label="打开${esc(r.title)}">${source?`<img src="${source}" alt="${esc(r.title)}" loading="lazy">`:videos.length?videoCover():`<div class="text-cover">${icon(r.recordType==='milestone'?'star':'book')}</div>`}<span class="date-badge">${dateText(r.recordTime,false)}</span>${r.media.length?`<span class="image-count">${mediaSummary(r.media)}</span>`:r.illustration?'<span class="sample-label">示例插画</span>':''}</button><div class="record-body"><h3><button class="record-title" data-action="detail" data-id="${r.id}">${esc(r.title)}</button></h3><p class="record-excerpt">${esc(r.content)||'这一刻，也想好好记住。'}</p><div class="record-tags">${r.recordType==='milestone'?'<span class="milestone-tag">✧ 成长里程碑</span>':''}${r.tags.map(t=>`<span># ${esc(t)}</span>`).join('')}</div><div class="record-footer"><span class="record-author">${avatar(r.author,'',r.userId)}${esc(r.author)} · ${esc(selectedChild()?.name)}</span><button data-action="detail" data-id="${r.id}" aria-label="查看评论">${icon('comment')} ${r.comments.length||'说点什么'}</button></div></div></article>`;
@@ -176,7 +189,7 @@ function formActions(label='保存'){return `<div class="form-actions"><button t
 function recordForm(id=null,milestone=false){
   if(!state.data.children.length){if(admin())return childForm();return toast('请先让家庭管理员添加孩子档案');}
   const r=id?state.data.records.find(r=>r.id===id):null;if(id&&!r)return toast('记录已不存在');
-  openModal(r?'编辑这段回忆':milestone?'记住一个第一次':'记录今天的小美好',`<p class="modal-intro">不需要特别盛大，平凡的一天也值得被收藏。</p><form data-form="record" ${r?`data-id="${r.id}"`:''}><div class="form-row"><label class="field"><span>为谁记录</span><select name="childId">${childOptions(r?.childId??state.childId)}</select></label><label class="field"><span>发生在这一天</span><input type="date" name="recordTime" required max="${today()}" value="${r?.recordTime??today()}"></label></div><label class="field"><span>给这段回忆起个名字</span><input name="title" required maxlength="80" value="${esc(r?.title)}" placeholder="例如：第一次，自己骑出好远"></label><label class="field"><span>想对未来的你说…</span><textarea name="content" maxlength="4000" rows="4" placeholder="今天发生了什么有趣的小事？">${esc(r?.content)}</textarea></label><div class="record-ai-entry"><button type="button" class="btn secondary small" data-action="ai-diary">${icon('leaf')} 帮我写一写</button><span class="form-hint">把真实的小事，整理成温暖的文字</span></div><div class="form-row"><label class="field"><span>记录类型</span><select name="recordType"><option value="diary" ${r?.recordType==='diary'?'selected':''}>日常点滴</option><option value="milestone" ${milestone||r?.recordType==='milestone'?'selected':''}>成长里程碑</option></select></label><label class="field"><span>里程碑主题（选填）</span><input name="milestone" list="milestone-options" maxlength="60" value="${esc(r?.milestone)}" placeholder="选择或自己写一个"><datalist id="milestone-options">${['第一次微笑','第一次叫妈妈','迈出第一步','第一天上幼儿园','学会骑车','生日快乐'].map(s=>`<option value="${s}"></option>`).join('')}</datalist></label></div><label class="field"><span>小标签（用逗号分隔，最多 6 个）</span><input name="tags" value="${esc(r?.tags.join('，'))}" maxlength="197" placeholder="亲子日常，户外时光，第一次"></label><label class="upload-zone">${icon('image')}<p>${r?'添加更多照片或视频':'选几张照片或一段视频，让回忆更鲜活'}</p><input type="file" name="files" accept=".jpg,.jpeg,.png,.mp4,image/jpeg,image/png,video/mp4" multiple><p>JPG / PNG 每张 8 MB，MP4 每个 100 MB；每次最多 6 个、合计 200 MB，每条记录最多 12 个文件。</p></label><div class="file-preview" id="file-preview"></div><p class="form-hint">视频暂不自动转码。推荐 H.264 / AAC 编码的 MP4；视频仅家人可见，不包含在访客分享中。</p><p class="upload-status" role="status" aria-live="polite" hidden></p>${r?.media.length?`<p class="form-hint">这条记录已有 ${mediaSummary(r.media)}，本次选择会追加照片或视频。</p>`:''}<p class="form-hint">${icon('lock')} 只有家人可见。发布后可单独创建限时分享。</p>${formActions(r?'保存这段回忆':'收藏这一刻')}</form>`);
+  openModal(r?'编辑这段回忆':milestone?'记住一个第一次':'记录今天的小美好',`<p class="modal-intro">不需要特别盛大，平凡的一天也值得被收藏。</p><form data-form="record" ${r?`data-id="${r.id}"`:''}><div class="form-row"><label class="field"><span>为谁记录</span><select name="childId">${childOptions(r?.childId??state.childId)}</select></label><label class="field"><span>发生在这一天</span><input type="date" name="recordTime" required max="${today()}" value="${r?.recordTime??today()}"></label></div><label class="field"><span>给这段回忆起个名字</span><input name="title" required maxlength="80" value="${esc(r?.title)}" placeholder="例如：第一次，自己骑出好远"></label><label class="field"><span>想对未来的你说…</span><textarea name="content" maxlength="4000" rows="4" placeholder="今天发生了什么有趣的小事？">${esc(r?.content)}</textarea></label><div class="record-ai-entry"><button type="button" class="btn secondary small" data-action="ai-diary">${icon('leaf')} 帮我写一写</button><span class="form-hint">把真实的小事，整理成温暖的文字</span></div><div class="form-row"><label class="field"><span>记录类型</span><select name="recordType"><option value="diary" ${r?.recordType==='diary'?'selected':''}>日常点滴</option><option value="milestone" ${milestone||r?.recordType==='milestone'?'selected':''}>成长里程碑</option></select></label><label class="field"><span>里程碑主题（选填）</span><input name="milestone" list="milestone-options" maxlength="60" value="${esc(r?.milestone)}" placeholder="选择或自己写一个"><datalist id="milestone-options">${['第一次微笑','第一次叫妈妈','迈出第一步','第一天上幼儿园','学会骑车','生日快乐'].map(s=>`<option value="${s}"></option>`).join('')}</datalist></label></div><label class="field"><span>小标签（用逗号分隔，最多 6 个）</span><input name="tags" value="${esc(r?.tags.join('，'))}" maxlength="197" placeholder="亲子日常，户外时光，第一次"></label><label class="upload-zone">${icon('image')}<p>${r?'添加更多照片或视频':'选几张照片或一段视频，让回忆更鲜活'}</p><input type="file" name="files" accept=".jpg,.jpeg,.png,.mp4,image/jpeg,image/png,video/mp4" multiple><p>JPG / PNG 每张 8 MB，MP4 每个 100 MB；每次最多 25 个、合计不超过 500 MB，每条记录最多 25 个文件。</p></label><div class="file-preview" id="file-preview"></div><p class="form-hint">视频暂不自动转码。推荐 H.264 / AAC 编码的 MP4；视频仅家人可见，不包含在访客分享中。</p><p class="upload-status" role="status" aria-live="polite" hidden></p>${r?.media.length?`<p class="form-hint">这条记录已有 ${mediaSummary(r.media)}，本次选择会追加照片或视频。</p>`:''}<p class="form-hint">${icon('lock')} 只有家人可见。发布后可单独创建限时分享。</p>${formActions(r?'保存这段回忆':'收藏这一刻')}</form>`);
 }
 function childForm(){openModal('为孩子建一本成长档案',`<p class="modal-intro">每个小小的你，都有属于自己的成长故事。</p><form data-form="child"><label class="field"><span>孩子的昵称</span><input name="name" required maxlength="40" placeholder="例如：小禾"></label><div class="form-row"><label class="field"><span>出生日期</span><input name="birthday" type="date" required max="${today()}"></label><label class="field"><span>性别</span><select name="gender"><option value="secret">暂不填写</option><option value="girl">女孩</option><option value="boy">男孩</option></select></label></div>${formActions('创建小档案')}</form>`);}
 function measurementForm(id=null){
@@ -317,7 +330,7 @@ document.addEventListener('change',event=>{
     $('#file-preview').querySelectorAll('video').forEach(video=>video.pause());
     objectUrls.forEach(URL.revokeObjectURL);objectUrls=[];
     const files=[...target.files];
-    try{validateMediaFiles(files);}catch(error){target.value='';$('#file-preview').innerHTML='';toast(error.message);return;}
+    try{validateMediaFiles(files,state.data?.records.find(r=>r.id===Number(target.closest('form')?.dataset.id))?.media.length||0);}catch(error){target.value='';$('#file-preview').innerHTML='';toast(error.message);return;}
     $('#file-preview').innerHTML=files.map(f=>{const url=URL.createObjectURL(f);objectUrls.push(url);return /\.mp4$/i.test(f.name)||f.type==='video/mp4'?`<div class="file-preview-video">${videoPlayer(url,'待上传视频预览')}<small>${esc(f.name)} · ${bytes(f.size)}</small></div>`:`<img src="${url}" alt="待上传图片预览">`;}).join('');
   }
 });
@@ -341,7 +354,7 @@ document.addEventListener('submit',event=>{
     }
     if(type==='record'){
       const files=[...$('input[name="files"]',form).files];
-      validateMediaFiles(files);
+      validateMediaFiles(files,state.data?.records.find(r=>r.id===Number(form.dataset.id))?.media.length||0);
       const tags=input.tags.split(/[,，]/).map(t=>t.trim()).filter(Boolean);
       if(tags.length>6||tags.some(t=>t.length>32))throw new Error('最多填写 6 个标签，每个标签不超过 32 个字符');
       const payload={childId:Number(input.childId),title:input.title,content:input.content,recordTime:input.recordTime,recordType:input.recordType,milestone:input.milestone,tags};

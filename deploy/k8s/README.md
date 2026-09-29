@@ -58,9 +58,11 @@ kubectl -n shiguang logs deployment/shiguang -c gateway --tail=50
 systemctl status shiguang-web.socket shiguang-web.service
 ```
 
-入口代理禁止访问未鉴权的 `/api/ai` 调试接口及 `/ai-chat.html`，家庭 AI 助手仍通过 `/api/growth` 使用。代理关闭响应缓冲以支持流式对话，上传请求上限为 201 MiB。业务层对照片、视频和家庭空间的限制继续由现有代码执行。
+入口代理禁止访问未鉴权的 `/api/ai` 调试接口及 `/ai-chat.html`，家庭 AI 助手仍通过 `/api/growth` 使用。代理关闭响应缓冲以支持流式对话。仓库中的新配置将请求上限调整为 501 MiB，以支持每次25个文件、文件合计500 MiB；线上需按下方步骤同步 Nacos、ConfigMap 和临时卷后才生效。业务层对单文件大小和家庭空间的限制继续执行。
 
 ## 更新 JAR
+
+25个文件／500 MB 上传版本需要额外同步配置：将 [上传配置片段](upload-nacos-snippet.yaml) 合并进 Nacos，更新 `shiguang-bootstrap` ConfigMap 中的 `nginx.conf` 为本目录新版，并将 Deployment 的 `app-temp` 卷上限调整为 `2Gi`。不要只替换 JAR：当前外部 Nacos 和已有 ConfigMap 不会随 JAR 自动更新。具体增量更新步骤见 [上传限制调整](../../docs/上传限制调整.md)。此次只修改源码及部署模板，尚未执行线上更新。
 
 邮箱与待办提醒版本还需先执行 `src/main/resources/growth/upgrade-email-reminders.sql`，将 [邮件配置片段](mail-nacos-snippet.yaml) 合并进 Nacos，并在现有 `shiguang-runtime` Secret 中增加 `QQ_SMTP_AUTH_CODE`（保留其他键）。当前 `SPRING_CONFIG_LOCATION` 只加载外部配置，修改 JAR 内 YAML 不会自动补齐线上 SMTP 配置。详细步骤见 [邮箱与提醒说明](../../docs/QQ邮箱验证码与待办提醒.md)。
 
